@@ -5,6 +5,15 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <title>P7 SHOW</title>
 <style>
+ CSS
+    /* ===== 820A 优化：彻底隐藏歌词、频谱、红绿灯面板 ===== */
+    #lyric-container, .lyric-box, .lyric-wrap, #lyrics, #lyricPanel, .lyric-panel,
+    #freqCanvas, .freq-bar, #spectrum, .visualizer,
+    #trafficLight, .traffic-light, #lightPanel, #qrModal, .activation-modal {
+        display: none !important;
+        visibility: hidden !important;
+        pointer-events: none !important;
+    }
   * { margin: 0; padding: 0; box-sizing: border-box; }
   html, body { width: 100%; height: 100%; overflow: hidden; background: transparent; font-family: "Microsoft YaHei", system-ui, sans-serif; -webkit-user-select: none; user-select: none; -webkit-tap-highlight-color: transparent; }
   body { margin: 0; background: transparent; } /* B项：NATIVE 混合渲染时透出下层 Filament 场景背景（深色 fog 兜底），保证歌词从车模轮廓外可读 */
@@ -851,15 +860,29 @@
 
       var camera = new THREE.PerspectiveCamera(50, window.innerWidth / window.innerHeight, 0.01, 1000); // viewer: new PerspectiveCamera(50, aspect, 0.01, 1000)
 
-      var renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true }); // B项：alpha 透明画布，歌词位于车模后
-      renderer.setClearColor(0x000000, 0); // B项：完全透明，露出 body 深色背景
-      renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
-      renderer.setSize(window.innerWidth, window.innerHeight);
-      renderer.useLegacyLights = false; // 物理光照模式，对应新版 three 默认；Neutral 环境 PointLight 强度 900 依赖此模式
-      renderer.toneMapping = THREE.ACESFilmicToneMapping; // 场景美化：ACES 柔和高光，防天空/车身高光过曝
-      renderer.toneMappingExposure = 0.95; // ACES 下略压高光，亮度由场景参数补偿（防过曝）
-      if (typeof renderer.outputEncoding !== 'undefined') { renderer.outputEncoding = THREE.sRGBEncoding; } // r148 须显式 sRGB 输出（新版本默认）
-      container.appendChild(renderer.domElement);
+// ===== 820A 调优：关闭抗锯齿，降低精度与像素比，节省显存带宽 =====
+var renderer = new THREE.WebGLRenderer({ 
+    antialias: false, 
+    alpha: true,
+    powerPreference: "low-power",
+    precision: "mediump"
+});
+renderer.setClearColor(0x000000, 0);
+renderer.setPixelRatio(1.0); // 锁死 1.0，杜绝高清超采样
+
+// 物理分辨率降为 75%，CSS 满屏拉伸
+var scale = 0.75;
+var renderWidth = Math.floor(window.innerWidth * scale);
+var renderHeight = Math.floor(window.innerHeight * scale);
+renderer.setSize(renderWidth, renderHeight, false);
+renderer.domElement.style.width = '100%';
+renderer.domElement.style.height = '100%';
+
+renderer.useLegacyLights = false;
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 0.95;
+if (typeof renderer.outputEncoding !== 'undefined') { renderer.outputEncoding = THREE.sRGBEncoding; }
+container.appendChild(renderer.domElement);
 
       // ---------- 控制器（旋转 + 缩放），限制仰角避免翻到车底 ----------
       var controls = new OrbitControls(camera, renderer.domElement);
@@ -4513,12 +4536,12 @@
         try {
         if (doorAnimRunning) doorTick(performance.now()); // 方案A：推进车门/前盖/尾箱铰链缓动
         dMapTick(); // v2.x：D档地图过渡动画逐帧推进（NATIVE 原生相机 / Three.js 相机双路径）
-        drawFreq();
-        pollLyricData();      // 轮询原生推送的歌词数据（内容变化才处理）
-        pollLightData();      // 轮询原生推送的红绿灯数据（500ms 节流）
-        updateLyricHighlight(); // 按本地时钟推进高亮当前行
-        updateLyricPanelVisibility(); // 横竖屏切换兜底（旋转未触发 resize 时）
-        updateLyricFollowPose(); // v34：歌词跟随镜头视角每帧刷新（开关开启时）
+        // drawFreq();
+        // pollLyricData();      // 轮询原生推送的歌词数据（内容变化才处理）
+        // pollLightData();      // 轮询原生推送的红绿灯数据（500ms 节流）
+        // updateLyricHighlight(); // 按本地时钟推进高亮当前行
+        // updateLyricPanelVisibility(); // 横竖屏切换兜底（旋转未触发 resize 时）
+        // updateLyricFollowPose(); // v34：歌词跟随镜头视角每帧刷新（开关开启时）
         // 实时按当前宽高比/分屏模式选择归位方案：状态（竖屏/横屏/三分屏/七分屏/全屏）变化时立即重算默认视角目标
         // （窗口尺寸变化本身走 onResize；此处在未触发 resize 的旋转/切屏场景下兜底）
         var portraitNow = window.innerHeight > window.innerWidth;
@@ -4604,7 +4627,13 @@
           applyDrawerTransform();
         }
         // 浮窗联动已移除（v3）：不移动相机与车模，OrbitControls 保持自由
-        renderer.render(scene, camera);
+        // ===== 820A 控帧：仅限制 3D 画面渲染为 20 帧，不阻断状态逻辑 =====
+        var _nowRender = performance.now();
+        if (!window._lastRenderTime) { window._lastRenderTime = _nowRender; }
+        if (_nowRender - window._lastRenderTime >= 50) {
+            renderer.render(scene, camera);
+            window._lastRenderTime = _nowRender;
+        }
         } catch (err) {
           if (window.console) console.error('[ANIMATE_ERR] ' + (err && err.message) + ' STACK=' + (err && err.stack ? err.stack.split('\n').slice(0, 8).join(' | ') : ''));
         }
