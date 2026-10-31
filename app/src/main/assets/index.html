@@ -1073,7 +1073,13 @@ container.appendChild(renderer.domElement);
         });
         scene.add(reflection);
       }
+     // ===== 820A 优化：添加基础全局环境光，杜绝转动车模时死角发黑 =====
+    var ambLight = new THREE.AmbientLight(0xffffff, 1.2);
+    scene.add(ambLight);
 
+    var hemiLight = new THREE.HemisphereLight(0xffffff, 0x444444, 0.8);
+    hemiLight.position.set(0, 20, 0);
+    scene.add(hemiLight);
       // ---------- 天空球场景列表：daylight / twilight / night（HDR 可切换） ----------
       // 用 RGBELoader 加载 background/ 下文件（daylight_2k.hdr、dusk_2k.hdr、qwantani_moon_noon_puresky_2k.hdr），
       // PMREMGenerator.fromEquirectangular 烘焙 IBL 环境；不再把 equirect 纹理设为 scene.background（画布透明）。
@@ -1082,9 +1088,9 @@ container.appendChild(renderer.domElement);
       // reflDark：倒影线性暗化系数（倒影色 = 水面基础色 × reflDark，MeshBasicMaterial 线性色 gamma 后提亮约 2 倍）。
       // twilight 地面偏亮 → 0.45 显示约 50,80,100 深于地面且可辨识；night 地面暗（gain 0.15）→ 0.02 显示约 21,24,26 才能深于地面。
       var SKY_SCENES = [
-        { key: 'daylight', label: 'daylight', btnLabel: 'daylight', file: 'background/daylight_2k.hdr', shadow: 0x262c33, gain: 0.8, reflDark: 0.4 }, // daylight：正午场景 v44 降亮 20%（数据层 IBL/背景整体乘 0.8，缓解车身颜色过亮失真）
-        { key: 'twilight', label: 'twilight', btnLabel: 'twilight', file: 'background/dusk_2k.hdr', shadow: 0x161a1e, gain: 0.455, reflDark: 0.45 }, // twilight：暗化地面（v1.39 再降30%：0.65*0.7=0.455）
-        { key: 'night',   label: 'night', btnLabel: 'night', file: 'background/qwantani_moon_noon_puresky_2k.hdr', shadow: 0x262c33, gain: 0.15, reflDark: 0.02 } // night：偏亮灰蓝
+        { key: 'daylight', label: 'daylight', btnLabel: 'daylight', file: 'background/daylight_2k.hdr', shadow: 0x262c33, gain: 1.2, reflDark: 0.4 }, // daylight：正午场景 v44 降亮 20%（数据层 IBL/背景整体乘 0.8，缓解车身颜色过亮失真）
+        { key: 'twilight', label: 'twilight', btnLabel: 'twilight', file: 'background/dusk_2k.hdr', shadow: 0x161a1e, gain: 0.8, reflDark: 0.45 }, // twilight：暗化地面（v1.39 再降30%：0.65*0.7=0.455）
+        { key: 'night',   label: 'night', btnLabel: 'night', file: 'background/qwantani_moon_noon_puresky_2k.hdr', shadow: 0x262c33, gain: 0.4, reflDark: 0.02 } // night：偏亮灰蓝
       ];
       // 场景4（night2）：源 HDR 基底亮度均值≈0.0036（约为其他场景的 1/90~1/300），默认 ACES 输出近纯黑。
       // 在数据层把 HDR 亮度乘 NIGHT2_GAIN（toneMappingExposure 与其他场景保持一致 0.95），
