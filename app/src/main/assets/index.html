@@ -862,6 +862,15 @@
 
 // ===== 820A 调优：关闭抗锯齿，降低精度与像素比，节省显存带宽 =====
 var renderer = new THREE.WebGLRenderer({ 
+ var renderer = new THREE.WebGLRenderer({ 
+    antialias: false, 
+    alpha: true,
+    powerPreference: "low-power",
+    precision: "mediump",
+    stencil: false,              // 禁用模板缓冲区，减少 25% 帧缓冲显存分配
+    depth: true,
+    preserveDrawingBuffer: false // 避免额外保留后台绘图缓冲
+});
     antialias: false, 
     alpha: true,
     powerPreference: "low-power",
@@ -886,6 +895,11 @@ container.appendChild(renderer.domElement);
 
       // ---------- 控制器（旋转 + 缩放），限制仰角避免翻到车底 ----------
       var controls = new OrbitControls(camera, renderer.domElement);
+     // 监听手势旋转与缩放，标记需要持续刷新画面
+window._renderUntil = performance.now() + 1500;
+controls.addEventListener('change', function () {
+    window._renderUntil = performance.now() + 1000; // 手势滑动时延长渲染 1 秒
+});
       controls.enableDamping = true;
       controls.dampingFactor = 0.08;
       controls.enablePan = false;
@@ -4637,7 +4651,19 @@ container.appendChild(renderer.domElement);
         var _nowRender = performance.now();
         if (!window._lastRenderTime) { window._lastRenderTime = _nowRender; }
         if (_nowRender - window._lastRenderTime >= 50) {
-            renderer.render(scene, camera);
+            var _nowRender = performance.now();
+if (!window._lastRenderTime) { window._lastRenderTime = _nowRender; }
+
+// 判定是否有动态事件（车门动画、D档过渡、手势拖拽触发的活跃期）
+var isSceneActive = (typeof doorAnimRunning !== 'undefined' && doorAnimRunning) ||
+                    (typeof dMapAnimRunning !== 'undefined' && dMapAnimRunning) ||
+                    (_nowRender < (window._renderUntil || 0));
+
+// 仅在场景有变化且达到 50ms (20FPS) 时才调用 GPU 绘制
+if (isSceneActive && (_nowRender - window._lastRenderTime >= 50)) {
+    renderer.render(scene, camera);
+    window._lastRenderTime = _nowRender;
+}
             window._lastRenderTime = _nowRender;
         }
         } catch (err) {
